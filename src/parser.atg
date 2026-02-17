@@ -1,0 +1,37 @@
+COMPILER Test
+
+CHARACTERS
+  digits = "0123456789".
+  letter = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".
+
+TOKENS
+  number = digits { digits }.
+  ident  = letter { letter | digits }.
+
+IGNORE '\t' .. '\r'
+
+PRODUCTIONS
+  Test = { Statement ";" }.
+
+  Statement =
+      ident '=' Expression
+    | Expression
+    .
+
+  Expression = Term
+    { '+' Term
+    | '-' Term
+    }.
+
+  Term = Factor
+    { '*' Factor
+    | '/' Factor
+    }.
+
+  Factor =
+      number
+    | ident
+    | '(' Expression ')'
+    .
+
+END Test.
