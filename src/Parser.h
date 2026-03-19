@@ -7,6 +7,7 @@
 #include <map>
 #include <string>
 #include <cwchar>
+#include <fstream>
 
 using namespace std;
 
@@ -61,7 +62,12 @@ private:
 		_print=11,
 		_read=12,
 		_variable=13,
-		_plusminus=14
+		_plusminus=14,
+		_alias=15,
+		_as=16,
+		_strToken=17,
+		_exportToken=18,
+		_to=19
 	};
 	int maxT;
 
@@ -95,6 +101,8 @@ public:
 	void Print();
 	void Read();
 	void Assignment();
+	void AliasStmt();
+	void ExportStmt();
 	void Ident();
 	void Expression();
 	void Term();

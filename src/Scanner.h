@@ -238,6 +238,8 @@ private:
 	void Init();
 	void NextCh();
 	void AddCh();
+	bool Comment0();
+	bool Comment1();
 
 	Token* NextToken();
 

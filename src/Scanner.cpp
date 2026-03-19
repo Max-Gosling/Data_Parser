@@ -420,13 +420,13 @@ Scanner::~Scanner() {
 void Scanner::Init() {
 	EOL    = '\n';
 	eofSym = 0;
-	maxT = 15;
-	noSym = 15;
+	maxT = 20;
+	noSym = 20;
 	int i;
 	for (i = 65; i <= 90; ++i) start.set(i, 1);
 	for (i = 97; i <= 122; ++i) start.set(i, 1);
 	for (i = 48; i <= 57; ++i) start.set(i, 2);
-	start.set(43, 14);
+	start.set(43, 16);
 	start.set(45, 5);
 	start.set(42, 6);
 	start.set(47, 7);
@@ -434,10 +434,15 @@ void Scanner::Init() {
 	start.set(40, 9);
 	start.set(41, 10);
 	start.set(59, 11);
+	start.set(34, 14);
 		start.set(Buffer::EoF, -1);
 	keywords.set(L"print", 11);
 	keywords.set(L"read", 12);
 	keywords.set(L"variable", 13);
+	keywords.set(L"alias", 15);
+	keywords.set(L"as", 16);
+	keywords.set(L"export", 18);
+	keywords.set(L"to", 19);
 
 
 	tvalLength = 128;
@@ -503,6 +508,52 @@ void Scanner::AddCh() {
 }
 
 
+bool Scanner::Comment0() {
+	int level = 1, pos0 = pos, line0 = line, col0 = col, charPos0 = charPos;
+	NextCh();
+	if (ch == L'/') {
+		NextCh();
+		for(;;) {
+			if (ch == 10) {
+				level--;
+				if (level == 0) { oldEols = line - line0; NextCh(); return true; }
+				NextCh();
+			} else if (ch == buffer->EoF) return false;
+			else NextCh();
+		}
+	} else {
+		buffer->SetPos(pos0); NextCh(); line = line0; col = col0; charPos = charPos0;
+	}
+	return false;
+}
+
+bool Scanner::Comment1() {
+	int level = 1, pos0 = pos, line0 = line, col0 = col, charPos0 = charPos;
+	NextCh();
+	if (ch == L'*') {
+		NextCh();
+		for(;;) {
+			if (ch == L'*') {
+				NextCh();
+				if (ch == L'/') {
+					level--;
+					if (level == 0) { oldEols = line - line0; NextCh(); return true; }
+					NextCh();
+				}
+			} else if (ch == L'/') {
+				NextCh();
+				if (ch == L'*') {
+					level++; NextCh();
+				}
+			} else if (ch == buffer->EoF) return false;
+			else NextCh();
+		}
+	} else {
+		buffer->SetPos(pos0); NextCh(); line = line0; col = col0; charPos = charPos0;
+	}
+	return false;
+}
+
 
 void Scanner::CreateHeapBlock() {
 	void* newHeap;
@@ -555,7 +606,7 @@ Token* Scanner::NextToken() {
 	while (ch == ' ' ||
 			(ch >= 9 && ch <= 10) || ch == 13 || ch == L' '
 	) NextCh();
-
+	if ((ch == L'/' && Comment0()) || (ch == L'/' && Comment1())) return NextToken();
 	int recKind = noSym;
 	int recEnd = pos;
 	t = CreateToken();
@@ -615,6 +666,14 @@ Token* Scanner::NextToken() {
 			case_13:
 			{t->kind = 14; break;}
 		case 14:
+			case_14:
+			if (ch <= 9 || (ch >= 11 && ch <= 12) || (ch >= 14 && ch <= L'!') || (ch >= L'#' && ch <= 65535)) {AddCh(); goto case_14;}
+			else if (ch == L'"') {AddCh(); goto case_15;}
+			else {goto case_0;}
+		case 15:
+			case_15:
+			{t->kind = 17; break;}
+		case 16:
 			recEnd = pos; recKind = 3;
 			if (ch == L'/') {AddCh(); goto case_12;}
 			else {t->kind = 3; break;}

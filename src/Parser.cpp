@@ -69,16 +69,34 @@ void Parser::DataParser() {
 }
 
 void Parser::Statement() {
-		if (la->kind == _variable) {
+		switch (la->kind) {
+		case _variable: {
 			VariableDecl();
-		} else if (la->kind == _print) {
+			break;
+		}
+		case _print: {
 			Print();
-		} else if (la->kind == _read) {
+			break;
+		}
+		case _read: {
 			Read();
-		} else if (la->kind == _ident) {
+			break;
+		}
+		case _ident: {
 			Assignment();
-		} else SynErr(16);
-		while (!(la->kind == _EOF || la->kind == _semicolon)) {SynErr(17); Get();}
+			break;
+		}
+		case _alias: {
+			AliasStmt();
+			break;
+		}
+		case _exportToken: {
+			ExportStmt();
+			break;
+		}
+		default: SynErr(21); break;
+		}
+		while (!(la->kind == _EOF || la->kind == _semicolon)) {SynErr(22); Get();}
 		Expect(_semicolon);
 }
 
@@ -115,7 +133,7 @@ void Parser::Read() {
 		Expect(_variable);
 		Ident();
 		double val, err; 
-		cout << "Enter variable val and err ";
+		cout << "Enter variable val and err: ";
 		cin >> val >> err;
 		vars[idValue] = Var(val, err); 
 }
@@ -125,6 +143,45 @@ void Parser::Assignment() {
 		Expect(_assign);
 		Expression();
 		string name = idValue; vars[name] = Var(exprValue, 0); 
+}
+
+void Parser::AliasStmt() {
+		Expect(_alias);
+		Ident();
+		string oldName = idValue; 
+		Expect(_as);
+		Ident();
+		string newName = idValue; 
+		if (vars.count(oldName)) {
+		   vars[newName] = vars[oldName]; 
+		} else {
+		   cout << "Error: variable " << oldName << " not found" << endl;
+		}
+		
+}
+
+void Parser::ExportStmt() {
+		Expect(_exportToken);
+		Ident();
+		string name = idValue; 
+		Expect(_to);
+		Expect(_strToken);
+		wstring ws(t->val); 
+		string p(ws.begin() + 1, ws.end() - 1); // Убираем кавычки из начала и конца
+		
+		ofstream f(p, ios::app); // Открываем файл в режиме добавления (append)
+		if (f.is_open()) {
+		   if (vars.count(name)) {
+		       f << name << " = " << vars[name].val << " +/- " << vars[name].err << endl;
+		       cout << "Successfully exported " << name << " to " << p << endl;
+		   } else {
+		       cout << "Error: variable " << name << " not defined." << endl;
+		   }
+		   f.close();
+		} else {
+		   cout << "Error: could not open file " << p << endl;
+		}
+		
 }
 
 void Parser::Ident() {
@@ -178,7 +235,7 @@ void Parser::Factor() {
 			Get();
 			Expression();
 			Expect(_rparen);
-		} else SynErr(18);
+		} else SynErr(23);
 }
 
 
@@ -282,7 +339,7 @@ void Parser::Parse() {
 }
 
 Parser::Parser(Scanner *scanner) {
-	maxT = 15;
+	maxT = 20;
 
 	ParserInitCaller<Parser>::CallInit(this);
 	dummyToken = NULL;
@@ -297,9 +354,9 @@ bool Parser::StartOf(int s) {
 	const bool T = true;
 	const bool x = false;
 
-	static bool set[2][17] = {
-		{T,x,x,x, x,x,x,x, x,x,T,x, x,x,x,x, x},
-		{x,T,x,x, x,x,x,x, x,x,x,T, T,T,x,x, x}
+	static bool set[2][22] = {
+		{T,x,x,x, x,x,x,x, x,x,T,x, x,x,x,x, x,x,x,x, x,x},
+		{x,T,x,x, x,x,x,x, x,x,x,T, T,T,x,T, x,x,T,x, x,x}
 	};
 
 
@@ -335,10 +392,15 @@ void Errors::SynErr(int line, int col, int n) {
 			case 12: s = coco_string_create(L"read expected"); break;
 			case 13: s = coco_string_create(L"variable expected"); break;
 			case 14: s = coco_string_create(L"plusminus expected"); break;
-			case 15: s = coco_string_create(L"??? expected"); break;
-			case 16: s = coco_string_create(L"invalid Statement"); break;
-			case 17: s = coco_string_create(L"this symbol not expected in Statement"); break;
-			case 18: s = coco_string_create(L"invalid Factor"); break;
+			case 15: s = coco_string_create(L"alias expected"); break;
+			case 16: s = coco_string_create(L"as expected"); break;
+			case 17: s = coco_string_create(L"strToken expected"); break;
+			case 18: s = coco_string_create(L"exportToken expected"); break;
+			case 19: s = coco_string_create(L"to expected"); break;
+			case 20: s = coco_string_create(L"??? expected"); break;
+			case 21: s = coco_string_create(L"invalid Statement"); break;
+			case 22: s = coco_string_create(L"this symbol not expected in Statement"); break;
+			case 23: s = coco_string_create(L"invalid Factor"); break;
 
 		default:
 		{

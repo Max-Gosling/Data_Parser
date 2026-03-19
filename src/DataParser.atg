@@ -2,6 +2,7 @@
 #include <map>
 #include <string>
 #include <cwchar>
+#include <fstream>
 
 using namespace std;
 
@@ -26,6 +27,7 @@ COMPILER DataParser
 CHARACTERS
   letter = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".
   digit = "0123456789".
+  anyChar = ANY - '"' - '\r' - '\n'.
 
 TOKENS
   ident = letter { letter | digit }.
@@ -42,6 +44,14 @@ TOKENS
   read = "read".
   variable = "variable".
   plusminus = "+/-". 
+  alias = "alias".
+  as = "as".
+  strToken = '"' { anyChar } '"'.
+  exportToken = "export".
+  to = "to".
+
+COMMENTS FROM "/*" TO "*/" NESTED
+COMMENTS FROM "//" TO "\n"
 
 IGNORE '\r' + '\n' + '\t' + ' '
 
@@ -50,7 +60,40 @@ DataParser
 = { Statement } EOF .
 
 Statement
-= ( VariableDecl | Print | Read | Assignment ) SYNC semicolon.
+= ( VariableDecl | Print | Read | Assignment | AliasStmt | ExportStmt ) SYNC semicolon.
+
+
+AliasStmt
+= alias Ident (. string oldName = idValue; .)
+  as Ident    (. string newName = idValue; 
+                 if (vars.count(oldName)) {
+                     vars[newName] = vars[oldName]; 
+                 } else {
+                     cout << "Error: variable " << oldName << " not found" << endl;
+                 }
+              .).
+
+
+ExportStmt
+= exportToken Ident (. string name = idValue; .)
+  to strToken
+  (. 
+     wstring ws(t->val); 
+     string p(ws.begin() + 1, ws.end() - 1); // Нафиг кавычки
+     
+     ofstream f(p, ios::app);
+     if (f.is_open()) {
+         if (vars.count(name)) {
+             f << name << " = " << vars[name].val << " +/- " << vars[name].err << endl;
+             cout << "Successfully exported " << name << " to " << p << endl;
+         } else {
+             cout << "Error: variable " << name << " not defined." << endl;
+         }
+         f.close();
+     } else {
+         cout << "Error: could not open file " << p << endl;
+     }
+  .).
 
 VariableDecl
 = variable Ident
