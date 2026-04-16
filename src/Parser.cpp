@@ -148,14 +148,18 @@ void Parser::Assignment() {
 void Parser::AliasStmt() {
 		Expect(_alias);
 		Ident();
-		string oldName = idValue; 
+		string old_name = idValue; 
 		Expect(_as);
 		Ident();
-		string newName = idValue; 
-		if (vars.count(oldName)) {
-		   vars[newName] = vars[oldName]; 
+		string new_name = idValue; 
+		auto node = vars.extract(old_name);
+		
+		if (!node.empty()) {
+		   node.key() = new_name;
+		   vars.insert(std::move(node));
 		} else {
-		   cout << "Error: variable " << oldName << " not found" << endl;
+		   // Защита от дурака
+		   cout << "Error: variable '" << old_name << "' not found!" << endl;
 		}
 		
 }
@@ -167,9 +171,10 @@ void Parser::ExportStmt() {
 		Expect(_to);
 		Expect(_strToken);
 		wstring ws(t->val); 
-		string p(ws.begin() + 1, ws.end() - 1); // Убираем кавычки из начала и конца
+		string p(ws.begin() + 1, ws.end() - 1); // Нафиг кавычки
 		
-		ofstream f(p, ios::app); // Открываем файл в режиме добавления (append)
+		
+		ofstream f(p, ios::app);
 		if (f.is_open()) {
 		   if (vars.count(name)) {
 		       f << name << " = " << vars[name].val << " +/- " << vars[name].err << endl;
@@ -191,50 +196,77 @@ void Parser::Ident() {
 }
 
 void Parser::Expression() {
+		double v1, e1; 
 		Term();
-		double cur = exprValue; 
+		v1 = exprValue; e1 = exprError; 
 		while (la->kind == _plus || la->kind == _minus) {
 			if (la->kind == _plus) {
 				Get();
 				Term();
-				cur += exprValue; wasIdent = false; 
+				exprValue = v1 + exprValue; 
+				exprError = sqrt(pow(e1, 2) + pow(exprError, 2));
+				v1 = exprValue; e1 = exprError;
+				
 			} else {
 				Get();
 				Term();
-				cur -= exprValue; wasIdent = false; 
+				exprValue = v1 - exprValue; 
+				exprError = sqrt(pow(e1, 2) + pow(exprError, 2));
+				v1 = exprValue; e1 = exprError;
+				
 			}
 		}
-		exprValue = cur; 
 }
 
 void Parser::Term() {
+		double v1, e1; 
 		Factor();
-		double cur = exprValue; 
+		v1 = exprValue; e1 = exprError; 
 		while (la->kind == _times || la->kind == _slash) {
 			if (la->kind == _times) {
 				Get();
 				Factor();
-				cur *= exprValue; wasIdent = false; 
+				exprError = sqrt(pow(v1 * exprError, 2) + pow(exprValue * e1, 2)); 
+				exprValue = v1 * exprValue; 
+				v1 = exprValue; e1 = exprError;
+				
 			} else {
 				Get();
 				Factor();
-				cur /= exprValue; wasIdent = false; 
+				exprError = sqrt(pow(e1 / exprValue, 2) + pow((v1 * exprError) / pow(exprValue, 2), 2));
+				exprValue = v1 / exprValue; 
+				v1 = exprValue; e1 = exprError;
+				
 			}
 		}
-		exprValue = cur; 
 }
 
 void Parser::Factor() {
+		bool negative = false; 
+		if (la->kind == _minus) {
+			Get();
+			negative = true; 
+		}
 		if (la->kind == _number) {
 			Get();
-			wstring num(t->val); exprValue = stod(num); wasIdent = false; 
+			wstring num(t->val); 
+			exprValue = stod(num);
+			exprError = 0.0; // У голого числа погрешности нет
+			if (negative) exprValue = -exprValue;
+			wasIdent = false; 
+			
 		} else if (la->kind == _ident) {
 			Ident();
-			exprValue = vars[idValue].val; wasIdent = true; 
+			exprValue = vars[idValue].val;
+			exprError = vars[idValue].err;
+			if (negative) exprValue = -exprValue; 
+			wasIdent = true; 
+			
 		} else if (la->kind == _lparen) {
 			Get();
 			Expression();
 			Expect(_rparen);
+			if (negative) exprValue = -exprValue; 
 		} else SynErr(23);
 }
 

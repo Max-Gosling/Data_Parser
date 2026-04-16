@@ -3,6 +3,7 @@
 #include <string>
 #include <cwchar>
 #include <fstream>
+#include <cmath>
 
 using namespace std;
 
@@ -14,6 +15,7 @@ struct Var {
 
 static map<string, Var> vars;
 static double exprValue;
+static double exprError;
 static string idValue;
 static bool wasIdent = false;
 
@@ -64,15 +66,20 @@ Statement
 
 
 AliasStmt
-= alias Ident (. string oldName = idValue; .)
-  as Ident    (. string newName = idValue; 
-                 if (vars.count(oldName)) {
-                     vars[newName] = vars[oldName]; 
-                 } else {
-                     cout << "Error: variable " << oldName << " not found" << endl;
-                 }
-              .).
+= "alias" Ident (. string old_name = idValue; .)
+  "as" Ident    (. string new_name = idValue; .)
 
+  (. 
+     auto node = vars.extract(old_name);
+
+     if (!node.empty()) {
+         node.key() = new_name;
+         vars.insert(std::move(node));
+     } else {
+         // Защита от дурака
+         cout << "Error: variable '" << old_name << "' not found!" << endl;
+     }
+  .).
 
 ExportStmt
 = exportToken Ident (. string name = idValue; .)
@@ -80,6 +87,7 @@ ExportStmt
   (. 
      wstring ws(t->val); 
      string p(ws.begin() + 1, ws.end() - 1); // Нафиг кавычки
+
      
      ofstream f(p, ios::app);
      if (f.is_open()) {
@@ -125,28 +133,66 @@ Read
 Assignment
 = Ident assign Expression                (. string name = idValue; vars[name] = Var(exprValue, 0); .).
 
-Expression
-= Term
-  (. double cur = exprValue; .)
-  { plus  Term (. cur += exprValue; wasIdent = false; .)
-  | minus Term (. cur -= exprValue; wasIdent = false; .)
-  }
-  (. exprValue = cur; .).
+Expression 
+(. double v1, e1; .)
+= Term (. v1 = exprValue; e1 = exprError; .) 
+  { 
+    "+" Term 
+    (. 
+       exprValue = v1 + exprValue; 
+       exprError = sqrt(pow(e1, 2) + pow(exprError, 2));
+       v1 = exprValue; e1 = exprError;
+    .) 
+  | "-" Term 
+    (. 
+       exprValue = v1 - exprValue; 
+       exprError = sqrt(pow(e1, 2) + pow(exprError, 2));
+       v1 = exprValue; e1 = exprError;
+    .) 
+  }.
 
-Term
-= Factor
-  (. double cur = exprValue; .)
-  { times Factor (. cur *= exprValue; wasIdent = false; .)
-  | slash Factor (. cur /= exprValue; wasIdent = false; .)
-  }
-  (. exprValue = cur; .).
+Term 
+(. double v1, e1; .)
+= Factor (. v1 = exprValue; e1 = exprError; .) 
+  { 
+    "*" Factor 
+    (. 
+       // Delta(A*B) = sqrt((A * errB)^2 + (B * errA)^2)
+       exprError = sqrt(pow(v1 * exprError, 2) + pow(exprValue * e1, 2)); 
+       exprValue = v1 * exprValue; 
+       v1 = exprValue; e1 = exprError;
+    .) 
+  | "/" Factor 
+    (. 
+       // Delta(A/B) = sqrt((errA / B)^2 + (A * errB / B^2)^2)
+       exprError = sqrt(pow(e1 / exprValue, 2) + pow((v1 * exprError) / pow(exprValue, 2), 2));
+       exprValue = v1 / exprValue; 
+       v1 = exprValue; e1 = exprError;
+    .) 
+  }.
 
 Factor
-= number
-  (. wstring num(t->val); exprValue = stod(num); wasIdent = false; .)
-| Ident
-  (. exprValue = vars[idValue].val; wasIdent = true; .)
-| lparen Expression rparen.
+  (. bool negative = false; .)
+  = [ minus (. negative = true; .) ]
+  ( 
+    number
+    (. 
+       wstring num(t->val); 
+       exprValue = stod(num);
+       exprError = 0.0; // У голого числа погрешности нет
+       if (negative) exprValue = -exprValue;
+       wasIdent = false; 
+    .)
+  | Ident
+    (. 
+       exprValue = vars[idValue].val;
+       exprError = vars[idValue].err;
+       if (negative) exprValue = -exprValue; 
+       wasIdent = true; 
+    .)
+  | lparen Expression rparen 
+    (. if (negative) exprValue = -exprValue; .)
+  ).
 
 Ident
 = ident

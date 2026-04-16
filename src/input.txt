@@ -1,3 +1,4 @@
-variable gravity = 9.806 +/- 0.002;
+variable gravity = -9.806 +/- 5;
+variable bur = -52 +/- 13;
 alias gravity as g;
-export g to "gravitacionnaia_const.txt";
+print(bur + g); // фигня, будет выводить вторую переменную
