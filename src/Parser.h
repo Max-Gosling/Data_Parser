@@ -8,6 +8,7 @@
 #include <string>
 #include <cwchar>
 #include <fstream>
+#include <cmath>
 
 using namespace std;
 
@@ -19,6 +20,7 @@ struct Var {
 
 static map<string, Var> vars;
 static double exprValue;
+static double exprError;
 static string idValue;
 static bool wasIdent = false;
 
