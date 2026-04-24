@@ -9,6 +9,7 @@
 #include <cwchar>
 #include <fstream>
 #include <cmath>
+#include <vector>
 
 using namespace std;
 
@@ -19,15 +20,73 @@ struct Var {
 };
 
 static map<string, Var> vars;
+static map<string, vector<Var>> arrays;
 static double exprValue;
 static double exprError;
 static string idValue;
-static bool wasIdent = false;
-
 
 static string varName;
 static double varVal;
 static double varErr;
+
+static Var getArrayElement(const string& name, int index) {
+    if (arrays.find(name) == arrays.end()) {
+        cout << "Array '" << name << "' not defined" << endl;
+        return Var(0,0);
+    }
+    if (index < 0 || index >= (int)arrays[name].size()) {
+        cout << "Index " << index << " out of range for array '" << name << endl;
+        return Var(0,0);
+    }
+    return arrays[name][index];
+}
+
+static void setArrayElement(const string& name, int index, const Var& value) {
+    if (arrays.find(name) == arrays.end()) {
+        cout << "Array '" << name << "' not defined" << endl;
+        return;
+    }
+    if (index < 0 || index >= (int)arrays[name].size()) {
+        cout << "Index " << index << " out of range for array '" << name << endl;
+        return;
+    }
+    arrays[name][index] = value;
+}
+
+static void printArray(const string& name) {
+    auto it = arrays.find(name);
+    if (it == arrays.end()) {
+        cout << "Array '" << name << "' not defined" << endl;
+        return;
+    }
+    cout << name << " = [";
+    for (size_t i = 0; i < it->second.size(); ++i) {
+        if (i > 0) cout << ", ";
+        cout << it->second[i].val << " +/- " << it->second[i].err;
+    }
+    cout << "]" << endl;
+}
+
+static void exportArrayToFile(const string& name, const string& filename) {
+    auto it = arrays.find(name);
+    if (it == arrays.end()) {
+        cout << "Array '" << name << "' not defined" << endl;
+        return;
+    }
+    ofstream f(filename, ios::app);
+    if (!f.is_open()) {
+        cout << "Error: could not open file " << filename << endl;
+        return;
+    }
+    f << name << " = [";
+    for (size_t i = 0; i < it->second.size(); ++i) {
+        if (i > 0) f << ", ";
+        f << it->second[i].val << " +/- " << it->second[i].err;
+    }
+    f << "]" << endl;
+    f.close();
+    cout << "Successfully exported array " << name << " to " << filename << endl;
+}
 
 
 #include "Scanner.h"
@@ -58,18 +117,20 @@ private:
 		_times=5,
 		_slash=6,
 		_assign=7,
-		_lparen=8,
-		_rparen=9,
-		_semicolon=10,
-		_print=11,
-		_read=12,
-		_variable=13,
-		_plusminus=14,
-		_alias=15,
-		_as=16,
-		_strToken=17,
-		_exportToken=18,
-		_to=19
+		_lbrack=8,
+		_rbrack=9,
+		_lsqbr=10,
+		_rsqbr=11,
+		_semicolon=12,
+		_print=13,
+		_read=14,
+		_variable=15,
+		_plusminus=16,
+		_alias=17,
+		_as=18,
+		_strToken=19,
+		_exportToken=20,
+		_to=21
 	};
 	int maxT;
 
@@ -99,14 +160,15 @@ public:
 
 	void DataParser();
 	void Statement();
-	void VariableDecl();
+	void Ident();
+	void ArrayElement();
+	void Expression();
 	void Print();
 	void Read();
 	void Assignment();
 	void AliasStmt();
 	void ExportStmt();
-	void Ident();
-	void Expression();
+	void ValueWithError();
 	void Term();
 	void Factor();
 

@@ -1,4 +1,33 @@
-variable gravity = -9.806 +/- 5;
-variable bur = -52 +/- 13;
-alias gravity as g;
-print(bur + g); // фигня, будет выводить вторую переменную
+// Так выглядят комментарии
+variable x = 52;
+variable bibki = 42 +/- 0.5; //можно указывать переменные с погрешностью и без
+variable pi = 3.14159 +/- 0.0001;
+variable sum = x + bibki;
+print sum;       //выводит данные в консоль
+
+/* 
+А вот так выглядят
+многострочные комментарии
+*/
+
+//массивы поддерживают переменные и просто числа
+variable nums = [bibki, 200, 300 +/- 1];
+print nums;
+
+//доступ к элементам массива
+nums[0] = 67;
+print nums[0];
+print nums[1];
+
+
+//ввод переменной через консоль
+read variable user_val;    
+print user_val;
+
+//переименовывание переменных
+alias sum as total;
+print total;              
+
+//экспорт значений в конец файла
+export total to "const.txt";
+export nums to "const.txt";

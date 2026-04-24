@@ -71,7 +71,32 @@ void Parser::DataParser() {
 void Parser::Statement() {
 		switch (la->kind) {
 		case _variable: {
-			VariableDecl();
+			Get();
+			Ident();
+			Expect(_assign);
+			if (la->kind == _lsqbr) {
+				Get();
+				string arrName = idValue; vector<Var> elems; 
+				ArrayElement();
+				elems.push_back(Var(varVal, varErr)); 
+				while (la->kind == 22 /* "," */) {
+					Get();
+					ArrayElement();
+					elems.push_back(Var(varVal, varErr)); 
+				}
+				Expect(_rsqbr);
+				arrays[arrName] = elems; 
+			} else if (StartOf(2)) {
+				varName = idValue; 
+				Expression();
+				varVal = exprValue; varErr = 0; 
+				if (la->kind == _plusminus) {
+					Get();
+					Expression();
+					varErr = exprValue; 
+				}
+				vars[varName] = Var(varVal, varErr); 
+			} else SynErr(24);
 			break;
 		}
 		case _print: {
@@ -94,105 +119,39 @@ void Parser::Statement() {
 			ExportStmt();
 			break;
 		}
-		default: SynErr(21); break;
+		default: SynErr(25); break;
 		}
-		while (!(la->kind == _EOF || la->kind == _semicolon)) {SynErr(22); Get();}
+		while (!(la->kind == _EOF || la->kind == _semicolon)) {SynErr(26); Get();}
 		Expect(_semicolon);
-}
-
-void Parser::VariableDecl() {
-		Expect(_variable);
-		Ident();
-		varName = idValue; 
-		Expect(_assign);
-		Expression();
-		varVal = exprValue; varErr = 0; 
-		if (la->kind == _plusminus) {
-			Get();
-			Expression();
-			varErr = exprValue; 
-		}
-		vars[varName] = Var(varVal, varErr);
-		
-}
-
-void Parser::Print() {
-		Expect(_print);
-		Expression();
-		if (wasIdent) {
-		   cout << idValue << " = " << vars[idValue].val << " +/- " << vars[idValue].err << endl;
-		} else {
-		   cout << exprValue << " +/- " << 0.0 << endl;
-		}
-		wasIdent = false;
-		
-}
-
-void Parser::Read() {
-		Expect(_read);
-		Expect(_variable);
-		Ident();
-		double val, err; 
-		cout << "Enter variable val and err: ";
-		cin >> val >> err;
-		vars[idValue] = Var(val, err); 
-}
-
-void Parser::Assignment() {
-		Ident();
-		Expect(_assign);
-		Expression();
-		string name = idValue; vars[name] = Var(exprValue, 0); 
-}
-
-void Parser::AliasStmt() {
-		Expect(_alias);
-		Ident();
-		string old_name = idValue; 
-		Expect(_as);
-		Ident();
-		string new_name = idValue; 
-		auto node = vars.extract(old_name);
-		
-		if (!node.empty()) {
-		   node.key() = new_name;
-		   vars.insert(std::move(node));
-		} else {
-		   // Защита от дурака
-		   cout << "Error: variable '" << old_name << "' not found!" << endl;
-		}
-		
-}
-
-void Parser::ExportStmt() {
-		Expect(_exportToken);
-		Ident();
-		string name = idValue; 
-		Expect(_to);
-		Expect(_strToken);
-		wstring ws(t->val); 
-		string p(ws.begin() + 1, ws.end() - 1); // Нафиг кавычки
-		
-		
-		ofstream f(p, ios::app);
-		if (f.is_open()) {
-		   if (vars.count(name)) {
-		       f << name << " = " << vars[name].val << " +/- " << vars[name].err << endl;
-		       cout << "Successfully exported " << name << " to " << p << endl;
-		   } else {
-		       cout << "Error: variable " << name << " not defined." << endl;
-		   }
-		   f.close();
-		} else {
-		   cout << "Error: could not open file " << p << endl;
-		}
-		
 }
 
 void Parser::Ident() {
 		Expect(_ident);
 		wstring wide(t->val);
 		idValue = string(wide.begin(), wide.end()); 
+}
+
+void Parser::ArrayElement() {
+		if (la->kind == _number) {
+			Get();
+			wstring num(t->val); varVal = stod(num); varErr = 0; 
+			if (la->kind == _plusminus) {
+				Get();
+				Expect(_number);
+				wstring num(t->val); varErr = stod(num); 
+			}
+		} else if (la->kind == _ident) {
+			Ident();
+			string name = idValue;
+			if (vars.find(name) != vars.end()) {
+			   varVal = vars[name].val;
+			   varErr = vars[name].err;
+			} else {
+			   cout << "Variable '" << name << "' not defined" << endl;
+			   varVal = 0; varErr = 0;
+			}
+			
+		} else SynErr(27);
 }
 
 void Parser::Expression() {
@@ -216,6 +175,130 @@ void Parser::Expression() {
 				
 			}
 		}
+}
+
+void Parser::Print() {
+		Expect(_print);
+		if (la->kind == _ident) {
+			Ident();
+			string name = idValue; bool hasIndex = false; int idx; 
+			if (la->kind == _lsqbr) {
+				Get();
+				Expression();
+				Expect(_rsqbr);
+				hasIndex = true; idx = (int)exprValue; 
+			}
+			if (hasIndex) {
+			   Var elem = getArrayElement(name, idx);
+			   cout << name << "[" << idx << "] = " << elem.val << " +/- " << elem.err << endl;
+			} else {
+			   if (arrays.find(name) != arrays.end())
+			       printArray(name);
+			   else if (vars.find(name) != vars.end())
+			       cout << name << " = " << vars[name].val << " +/- " << vars[name].err << endl;
+			   else
+			       cout << "'" << name << "' not defined" << endl;
+			}
+			
+		} else if (StartOf(2)) {
+			Expression();
+			cout << exprValue << " +/- " << exprError << endl;
+			
+		} else SynErr(28);
+}
+
+void Parser::Read() {
+		Expect(_read);
+		Expect(_variable);
+		Ident();
+		double val, err;
+		cout << "Enter variable val and err via space: ";
+		cin >> val >> err;
+		vars[idValue] = Var(val, err);
+		
+}
+
+void Parser::Assignment() {
+		Ident();
+		string name = idValue; bool hasIndex = false; int idx; 
+		if (la->kind == _lsqbr) {
+			Get();
+			Expression();
+			Expect(_rsqbr);
+			hasIndex = true; idx = (int)exprValue; 
+		}
+		Expect(_assign);
+		ValueWithError();
+		if (hasIndex)
+		   setArrayElement(name, idx, Var(varVal, varErr));
+		else
+		   vars[name] = Var(varVal, varErr);
+		
+}
+
+void Parser::AliasStmt() {
+		Expect(_alias);
+		Ident();
+		string old_name = idValue; 
+		Expect(_as);
+		Ident();
+		string new_name = idValue; 
+		auto node = vars.extract(old_name);
+		if (!node.empty()) {
+		   node.key() = new_name;
+		   vars.insert(std::move(node));
+		} else {
+		   cout << "Variable '" << old_name << "' not found" << endl;
+		}
+		
+}
+
+void Parser::ExportStmt() {
+		Expect(_exportToken);
+		Ident();
+		string name = idValue; 
+		Expect(_to);
+		Expect(_strToken);
+		wstring ws(t->val); 
+		string p(ws.begin() + 1, ws.end() - 1);
+		if (vars.count(name)) {
+		   ofstream f(p, ios::app);
+		   if (f.is_open()) {
+		       f << name << " = " << vars[name].val << " +/- " << vars[name].err << endl;
+		       cout << "Successfully exported " << name << " to " << p << endl;
+		       f.close();
+		   } else {
+		       cout << "Error: could not open file " << p << endl;
+		   }
+		} else if (arrays.count(name)) {
+		   exportArrayToFile(name, p);
+		} else {
+		   cout << "Variable/array " << name << " not defined" << endl;
+		}
+		
+}
+
+void Parser::ValueWithError() {
+		if (la->kind == _number) {
+			Get();
+			wstring num(t->val); varVal = stod(num); varErr = 0; 
+			if (la->kind == _plusminus) {
+				Get();
+				Expect(_number);
+				wstring num(t->val); varErr = stod(num); 
+			}
+		} else if (la->kind == _ident) {
+			Ident();
+			string name = idValue;
+			if (vars.find(name) != vars.end()) {
+			   varVal = vars[name].val;
+			   varErr = vars[name].err;
+			} else {
+			   cout << "Variable '" << name << "' not defined" << endl;
+			   varVal = 0; varErr = 0;
+			}
+			
+		} else SynErr(29);
 }
 
 void Parser::Term() {
@@ -242,7 +325,7 @@ void Parser::Term() {
 }
 
 void Parser::Factor() {
-		bool negative = false; 
+		bool negative = false; string name; int idx; bool isArrayAccess = false; 
 		if (la->kind == _minus) {
 			Get();
 			negative = true; 
@@ -251,23 +334,47 @@ void Parser::Factor() {
 			Get();
 			wstring num(t->val); 
 			exprValue = stod(num);
-			exprError = 0.0; // У голого числа погрешности нет
+			exprError = 0.0;
 			if (negative) exprValue = -exprValue;
-			wasIdent = false; 
 			
 		} else if (la->kind == _ident) {
 			Ident();
-			exprValue = vars[idValue].val;
-			exprError = vars[idValue].err;
-			if (negative) exprValue = -exprValue; 
-			wasIdent = true; 
+			name = idValue;
+			if (la->kind == _lsqbr) {
+			   isArrayAccess = true;
+			} else {
+			   if (vars.find(name) != vars.end()) {
+			       exprValue = vars[name].val;
+			       exprError = vars[name].err;
+			   } else if (arrays.find(name) != arrays.end()) {
+			       cout << "Cannot use array '" << name << "' without index" << endl;
+			       exprValue = 0; exprError = 0;
+			   } else {
+			       cout << "Variable '" << name << "' not defined" << endl;
+			       exprValue = 0; exprError = 0;
+			   }
+			   if (negative) exprValue = -exprValue;
+			}
 			
-		} else if (la->kind == _lparen) {
+			if (la->kind == _lsqbr) {
+				Get();
+				Expression();
+				Expect(_rsqbr);
+				if (isArrayAccess) {
+				  idx = (int)exprValue;
+				  Var elem = getArrayElement(name, idx);
+				  exprValue = elem.val;
+				  exprError = elem.err;
+				  if (negative) exprValue = -exprValue;
+				}
+				
+			}
+		} else if (la->kind == _lbrack) {
 			Get();
 			Expression();
-			Expect(_rparen);
+			Expect(_rbrack);
 			if (negative) exprValue = -exprValue; 
-		} else SynErr(23);
+		} else SynErr(30);
 }
 
 
@@ -371,7 +478,7 @@ void Parser::Parse() {
 }
 
 Parser::Parser(Scanner *scanner) {
-	maxT = 20;
+	maxT = 23;
 
 	ParserInitCaller<Parser>::CallInit(this);
 	dummyToken = NULL;
@@ -386,9 +493,10 @@ bool Parser::StartOf(int s) {
 	const bool T = true;
 	const bool x = false;
 
-	static bool set[2][22] = {
-		{T,x,x,x, x,x,x,x, x,x,T,x, x,x,x,x, x,x,x,x, x,x},
-		{x,T,x,x, x,x,x,x, x,x,x,T, T,T,x,T, x,x,T,x, x,x}
+	static bool set[3][25] = {
+		{T,x,x,x, x,x,x,x, x,x,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x},
+		{x,T,x,x, x,x,x,x, x,x,x,x, x,T,T,T, x,T,x,x, T,x,x,x, x},
+		{x,T,T,x, T,x,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x}
 	};
 
 
@@ -417,22 +525,29 @@ void Errors::SynErr(int line, int col, int n) {
 			case 5: s = coco_string_create(L"times expected"); break;
 			case 6: s = coco_string_create(L"slash expected"); break;
 			case 7: s = coco_string_create(L"assign expected"); break;
-			case 8: s = coco_string_create(L"lparen expected"); break;
-			case 9: s = coco_string_create(L"rparen expected"); break;
-			case 10: s = coco_string_create(L"semicolon expected"); break;
-			case 11: s = coco_string_create(L"print expected"); break;
-			case 12: s = coco_string_create(L"read expected"); break;
-			case 13: s = coco_string_create(L"variable expected"); break;
-			case 14: s = coco_string_create(L"plusminus expected"); break;
-			case 15: s = coco_string_create(L"alias expected"); break;
-			case 16: s = coco_string_create(L"as expected"); break;
-			case 17: s = coco_string_create(L"strToken expected"); break;
-			case 18: s = coco_string_create(L"exportToken expected"); break;
-			case 19: s = coco_string_create(L"to expected"); break;
-			case 20: s = coco_string_create(L"??? expected"); break;
-			case 21: s = coco_string_create(L"invalid Statement"); break;
-			case 22: s = coco_string_create(L"this symbol not expected in Statement"); break;
-			case 23: s = coco_string_create(L"invalid Factor"); break;
+			case 8: s = coco_string_create(L"lbrack expected"); break;
+			case 9: s = coco_string_create(L"rbrack expected"); break;
+			case 10: s = coco_string_create(L"lsqbr expected"); break;
+			case 11: s = coco_string_create(L"rsqbr expected"); break;
+			case 12: s = coco_string_create(L"semicolon expected"); break;
+			case 13: s = coco_string_create(L"print expected"); break;
+			case 14: s = coco_string_create(L"read expected"); break;
+			case 15: s = coco_string_create(L"variable expected"); break;
+			case 16: s = coco_string_create(L"plusminus expected"); break;
+			case 17: s = coco_string_create(L"alias expected"); break;
+			case 18: s = coco_string_create(L"as expected"); break;
+			case 19: s = coco_string_create(L"strToken expected"); break;
+			case 20: s = coco_string_create(L"exportToken expected"); break;
+			case 21: s = coco_string_create(L"to expected"); break;
+			case 22: s = coco_string_create(L"\",\" expected"); break;
+			case 23: s = coco_string_create(L"??? expected"); break;
+			case 24: s = coco_string_create(L"invalid Statement"); break;
+			case 25: s = coco_string_create(L"invalid Statement"); break;
+			case 26: s = coco_string_create(L"this symbol not expected in Statement"); break;
+			case 27: s = coco_string_create(L"invalid ArrayElement"); break;
+			case 28: s = coco_string_create(L"invalid Print"); break;
+			case 29: s = coco_string_create(L"invalid ValueWithError"); break;
+			case 30: s = coco_string_create(L"invalid Factor"); break;
 
 		default:
 		{

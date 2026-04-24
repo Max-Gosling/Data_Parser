@@ -4,6 +4,7 @@
 #include <cwchar>
 #include <fstream>
 #include <cmath>
+#include <vector>
 
 using namespace std;
 
@@ -14,20 +15,78 @@ struct Var {
 };
 
 static map<string, Var> vars;
+static map<string, vector<Var>> arrays;
 static double exprValue;
 static double exprError;
 static string idValue;
-static bool wasIdent = false;
-
 
 static string varName;
 static double varVal;
 static double varErr;
 
+static Var getArrayElement(const string& name, int index) {
+    if (arrays.find(name) == arrays.end()) {
+        cout << "Array '" << name << "' not defined" << endl;
+        return Var(0,0);
+    }
+    if (index < 0 || index >= (int)arrays[name].size()) {
+        cout << "Index " << index << " out of range for array '" << name << endl;
+        return Var(0,0);
+    }
+    return arrays[name][index];
+}
+
+static void setArrayElement(const string& name, int index, const Var& value) {
+    if (arrays.find(name) == arrays.end()) {
+        cout << "Array '" << name << "' not defined" << endl;
+        return;
+    }
+    if (index < 0 || index >= (int)arrays[name].size()) {
+        cout << "Index " << index << " out of range for array '" << name << endl;
+        return;
+    }
+    arrays[name][index] = value;
+}
+
+static void printArray(const string& name) {
+    auto it = arrays.find(name);
+    if (it == arrays.end()) {
+        cout << "Array '" << name << "' not defined" << endl;
+        return;
+    }
+    cout << name << " = [";
+    for (size_t i = 0; i < it->second.size(); ++i) {
+        if (i > 0) cout << ", ";
+        cout << it->second[i].val << " +/- " << it->second[i].err;
+    }
+    cout << "]" << endl;
+}
+
+static void exportArrayToFile(const string& name, const string& filename) {
+    auto it = arrays.find(name);
+    if (it == arrays.end()) {
+        cout << "Array '" << name << "' not defined" << endl;
+        return;
+    }
+    ofstream f(filename, ios::app);
+    if (!f.is_open()) {
+        cout << "Error: could not open file " << filename << endl;
+        return;
+    }
+    f << name << " = [";
+    for (size_t i = 0; i < it->second.size(); ++i) {
+        if (i > 0) f << ", ";
+        f << it->second[i].val << " +/- " << it->second[i].err;
+    }
+    f << "]" << endl;
+    f.close();
+    cout << "Successfully exported array " << name << " to " << filename << endl;
+}
+
 COMPILER DataParser
 
 CHARACTERS
-  letter = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".
+  letter = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_".
   digit = "0123456789".
   anyChar = ANY - '"' - '\r' - '\n'.
 
@@ -39,8 +98,10 @@ TOKENS
   times = '*'.
   slash = '/'.
   assign = '='.
-  lparen = '('.
-  rparen = ')'.
+  lbrack = '('.
+  rbrack = ')'.
+  lsqbr = '['.
+  rsqbr = ']'.
   semicolon = ';'.
   print = "print".
   read = "read".
@@ -62,88 +123,171 @@ DataParser
 = { Statement } EOF .
 
 Statement
-= ( VariableDecl | Print | Read | Assignment | AliasStmt | ExportStmt ) SYNC semicolon.
+= ( variable Ident assign
+    ( lsqbr
+      (. string arrName = idValue; vector<Var> elems; .)
+      ArrayElement
+      (. elems.push_back(Var(varVal, varErr)); .)
+      { ',' ArrayElement
+        (. elems.push_back(Var(varVal, varErr)); .)
+      }
+      rsqbr
+      (. arrays[arrName] = elems; .)
+    | (. varName = idValue; .)
+      Expression
+      (. varVal = exprValue; varErr = 0; .)
+      [ plusminus Expression
+        (. varErr = exprValue; .)
+      ]
+      (. vars[varName] = Var(varVal, varErr); .)
+    )
+  | Print
+  | Read
+  | Assignment
+  | AliasStmt
+  | ExportStmt
+  ) SYNC semicolon .
 
-
-AliasStmt
-= "alias" Ident (. string old_name = idValue; .)
-  "as" Ident    (. string new_name = idValue; .)
-
-  (. 
-     auto node = vars.extract(old_name);
-
-     if (!node.empty()) {
-         node.key() = new_name;
-         vars.insert(std::move(node));
-     } else {
-         // Защита от дурака
-         cout << "Error: variable '" << old_name << "' not found!" << endl;
-     }
-  .).
-
-ExportStmt
-= exportToken Ident (. string name = idValue; .)
-  to strToken
-  (. 
-     wstring ws(t->val); 
-     string p(ws.begin() + 1, ws.end() - 1); // Нафиг кавычки
-
-     
-     ofstream f(p, ios::app);
-     if (f.is_open()) {
-         if (vars.count(name)) {
-             f << name << " = " << vars[name].val << " +/- " << vars[name].err << endl;
-             cout << "Successfully exported " << name << " to " << p << endl;
-         } else {
-             cout << "Error: variable " << name << " not defined." << endl;
-         }
-         f.close();
-     } else {
-         cout << "Error: could not open file " << p << endl;
-     }
-  .).
-
-VariableDecl
-= variable Ident
-  (. varName = idValue; .)
-  '=' Expression
-  (. varVal = exprValue; varErr = 0; .)
-  [ plusminus Expression
-    (. varErr = exprValue; .)
+ArrayElement
+= number
+  (. wstring num(t->val); varVal = stod(num); varErr = 0; .)
+  [ plusminus number
+    (. wstring num(t->val); varErr = stod(num); .)
   ]
-  (. vars[varName] = Var(varVal, varErr);
-  .).
+| Ident
+  (. 
+    string name = idValue;
+    if (vars.find(name) != vars.end()) {
+        varVal = vars[name].val;
+        varErr = vars[name].err;
+    } else {
+        cout << "Variable '" << name << "' not defined" << endl;
+        varVal = 0; varErr = 0;
+    }
+  .)
+.
 
 Print
-= print Expression
-  (. if (wasIdent) {
-         cout << idValue << " = " << vars[idValue].val << " +/- " << vars[idValue].err << endl;
-     } else {
-         cout << exprValue << " +/- " << 0.0 << endl;
-     }
-     wasIdent = false;
-  .).
+= print (
+    Ident
+    (. string name = idValue; bool hasIndex = false; int idx; .)
+    [ lsqbr Expression rsqbr
+      (. hasIndex = true; idx = (int)exprValue; .)
+    ]
+    (. 
+      if (hasIndex) {
+          Var elem = getArrayElement(name, idx);
+          cout << name << "[" << idx << "] = " << elem.val << " +/- " << elem.err << endl;
+      } else {
+          if (arrays.find(name) != arrays.end())
+              printArray(name);
+          else if (vars.find(name) != vars.end())
+              cout << name << " = " << vars[name].val << " +/- " << vars[name].err << endl;
+          else
+              cout << "'" << name << "' not defined" << endl;
+      }
+    .)
+  | Expression
+    (. 
+      cout << exprValue << " +/- " << exprError << endl;
+    .)
+  )
+.
 
 Read
-= read variable Ident                    (. double val, err; 
-                                            cout << "Enter variable val and err: ";
-                                            cin >> val >> err;
-                                            vars[idValue] = Var(val, err); .).
+= read variable Ident
+  (. 
+    double val, err;
+    cout << "Enter variable val and err via space: ";
+    cin >> val >> err;
+    vars[idValue] = Var(val, err);
+  .)
+.
 
 Assignment
-= Ident assign Expression                (. string name = idValue; vars[name] = Var(exprValue, 0); .).
+= Ident
+  (. string name = idValue; bool hasIndex = false; int idx; .)
+  [ lsqbr Expression rsqbr
+    (. hasIndex = true; idx = (int)exprValue; .)
+  ]
+  assign ValueWithError
+  (. 
+    if (hasIndex)
+        setArrayElement(name, idx, Var(varVal, varErr));
+    else
+        vars[name] = Var(varVal, varErr);
+  .)
+.
+
+ValueWithError
+= number
+  (. wstring num(t->val); varVal = stod(num); varErr = 0; .)
+  [ plusminus number
+    (. wstring num(t->val); varErr = stod(num); .)
+  ]
+| Ident
+  (. 
+    string name = idValue;
+    if (vars.find(name) != vars.end()) {
+        varVal = vars[name].val;
+        varErr = vars[name].err;
+    } else {
+        cout << "Variable '" << name << "' not defined" << endl;
+        varVal = 0; varErr = 0;
+    }
+  .)
+.
+
+AliasStmt
+= alias Ident (. string old_name = idValue; .)
+  as Ident    (. string new_name = idValue; .)
+  (. 
+    auto node = vars.extract(old_name);
+    if (!node.empty()) {
+        node.key() = new_name;
+        vars.insert(std::move(node));
+    } else {
+        cout << "Variable '" << old_name << "' not found" << endl;
+    }
+  .)
+.
+
+ExportStmt
+= exportToken (
+    Ident (. string name = idValue; .)
+    to strToken
+    (. 
+      wstring ws(t->val); 
+      string p(ws.begin() + 1, ws.end() - 1);
+      if (vars.count(name)) {
+          ofstream f(p, ios::app);
+          if (f.is_open()) {
+              f << name << " = " << vars[name].val << " +/- " << vars[name].err << endl;
+              cout << "Successfully exported " << name << " to " << p << endl;
+              f.close();
+          } else {
+              cout << "Error: could not open file " << p << endl;
+          }
+      } else if (arrays.count(name)) {
+          exportArrayToFile(name, p);
+      } else {
+          cout << "Variable/array " << name << " not defined" << endl;
+      }
+    .)
+  )
+.
 
 Expression 
 (. double v1, e1; .)
 = Term (. v1 = exprValue; e1 = exprError; .) 
   { 
-    "+" Term 
+    plus Term 
     (. 
        exprValue = v1 + exprValue; 
        exprError = sqrt(pow(e1, 2) + pow(exprError, 2));
        v1 = exprValue; e1 = exprError;
     .) 
-  | "-" Term 
+  | minus Term 
     (. 
        exprValue = v1 - exprValue; 
        exprError = sqrt(pow(e1, 2) + pow(exprError, 2));
@@ -155,16 +299,14 @@ Term
 (. double v1, e1; .)
 = Factor (. v1 = exprValue; e1 = exprError; .) 
   { 
-    "*" Factor 
+    times Factor 
     (. 
-       // Delta(A*B) = sqrt((A * errB)^2 + (B * errA)^2)
        exprError = sqrt(pow(v1 * exprError, 2) + pow(exprValue * e1, 2)); 
        exprValue = v1 * exprValue; 
        v1 = exprValue; e1 = exprError;
     .) 
-  | "/" Factor 
+  | slash Factor 
     (. 
-       // Delta(A/B) = sqrt((errA / B)^2 + (A * errB / B^2)^2)
        exprError = sqrt(pow(e1 / exprValue, 2) + pow((v1 * exprError) / pow(exprValue, 2), 2));
        exprValue = v1 / exprValue; 
        v1 = exprValue; e1 = exprError;
@@ -172,25 +314,47 @@ Term
   }.
 
 Factor
-  (. bool negative = false; .)
+  (. bool negative = false; string name; int idx; bool isArrayAccess = false; .)
   = [ minus (. negative = true; .) ]
   ( 
     number
     (. 
        wstring num(t->val); 
        exprValue = stod(num);
-       exprError = 0.0; // У голого числа погрешности нет
+       exprError = 0.0;
        if (negative) exprValue = -exprValue;
-       wasIdent = false; 
     .)
   | Ident
     (. 
-       exprValue = vars[idValue].val;
-       exprError = vars[idValue].err;
-       if (negative) exprValue = -exprValue; 
-       wasIdent = true; 
+       name = idValue;
+       if (la->kind == _lsqbr) {
+           isArrayAccess = true;
+       } else {
+           if (vars.find(name) != vars.end()) {
+               exprValue = vars[name].val;
+               exprError = vars[name].err;
+           } else if (arrays.find(name) != arrays.end()) {
+               cout << "Cannot use array '" << name << "' without index" << endl;
+               exprValue = 0; exprError = 0;
+           } else {
+               cout << "Variable '" << name << "' not defined" << endl;
+               exprValue = 0; exprError = 0;
+           }
+           if (negative) exprValue = -exprValue;
+       }
     .)
-  | lparen Expression rparen 
+    [ lsqbr Expression rsqbr
+      (. 
+         if (isArrayAccess) {
+            idx = (int)exprValue;
+            Var elem = getArrayElement(name, idx);
+            exprValue = elem.val;
+            exprError = elem.err;
+            if (negative) exprValue = -exprValue;
+         }
+      .)
+    ]
+  | lbrack Expression rbrack 
     (. if (negative) exprValue = -exprValue; .)
   ).
 
