@@ -135,7 +135,7 @@ Statement
       (. arrays[arrName] = elems; .)
     | (. varName = idValue; .)
       Expression
-      (. varVal = exprValue; varErr = 0; .)
+      (. varVal = exprValue; varErr = exprError; .)
       [ plusminus Expression
         (. varErr = exprValue; .)
       ]

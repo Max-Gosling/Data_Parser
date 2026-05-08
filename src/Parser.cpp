@@ -89,7 +89,7 @@ void Parser::Statement() {
 			} else if (StartOf(2)) {
 				varName = idValue; 
 				Expression();
-				varVal = exprValue; varErr = 0; 
+				varVal = exprValue; varErr = exprError; 
 				if (la->kind == _plusminus) {
 					Get();
 					Expression();

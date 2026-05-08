@@ -5,6 +5,9 @@ variable pi = 3.14159 +/- 0.0001;
 variable sum = x + bibki;
 print sum;       //выводит данные в консоль
 
+print (pi+bibki);
+print (pi*bibki);
+
 /* 
 А вот так выглядят
 многострочные комментарии
@@ -17,7 +20,7 @@ print nums;
 //доступ к элементам массива
 nums[0] = 67;
 print nums[0];
-print nums[1];
+print nums[2];
 
 
 //ввод переменной через консоль
