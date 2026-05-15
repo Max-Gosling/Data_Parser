@@ -18,10 +18,17 @@ variable nums = [bibki, 200, 300 +/- 1];
 print nums;
 
 //доступ к элементам массива
-nums[0] = 67;
+
+variable lupa = nums[1]*2 + 2;
+print lupa;
+
+nums[0] = 67 +/- 1;
 print nums[0];
 print nums[2];
 
+
+nums.append(52 +/- 4);
+print nums;
 
 //ввод переменной через консоль
 read variable user_val;    

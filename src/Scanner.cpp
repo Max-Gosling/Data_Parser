@@ -420,14 +420,14 @@ Scanner::~Scanner() {
 void Scanner::Init() {
 	EOL    = '\n';
 	eofSym = 0;
-	maxT = 23;
-	noSym = 23;
+	maxT = 25;
+	noSym = 25;
 	int i;
 	for (i = 65; i <= 90; ++i) start.set(i, 1);
 	for (i = 95; i <= 95; ++i) start.set(i, 1);
 	for (i = 97; i <= 122; ++i) start.set(i, 1);
 	for (i = 48; i <= 57; ++i) start.set(i, 2);
-	start.set(43, 18);
+	start.set(43, 19);
 	start.set(45, 5);
 	start.set(42, 6);
 	start.set(47, 7);
@@ -438,7 +438,8 @@ void Scanner::Init() {
 	start.set(93, 12);
 	start.set(59, 13);
 	start.set(34, 16);
-	start.set(44, 19);
+	start.set(46, 18);
+	start.set(44, 20);
 		start.set(Buffer::EoF, -1);
 	keywords.set(L"print", 13);
 	keywords.set(L"read", 14);
@@ -447,6 +448,7 @@ void Scanner::Init() {
 	keywords.set(L"as", 18);
 	keywords.set(L"export", 20);
 	keywords.set(L"to", 21);
+	keywords.set(L"append", 23);
 
 
 	tvalLength = 128;
@@ -682,11 +684,13 @@ Token* Scanner::NextToken() {
 			case_17:
 			{t->kind = 19; break;}
 		case 18:
+			{t->kind = 22; break;}
+		case 19:
 			recEnd = pos; recKind = 3;
 			if (ch == L'/') {AddCh(); goto case_14;}
 			else {t->kind = 3; break;}
-		case 19:
-			{t->kind = 22; break;}
+		case 20:
+			{t->kind = 24; break;}
 
 	}
 	AppendVal(t);

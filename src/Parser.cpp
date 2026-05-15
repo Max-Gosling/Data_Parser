@@ -79,7 +79,7 @@ void Parser::Statement() {
 				string arrName = idValue; vector<Var> elems; 
 				ArrayElement();
 				elems.push_back(Var(varVal, varErr)); 
-				while (la->kind == 22 /* "," */) {
+				while (la->kind == 24 /* "," */) {
 					Get();
 					ArrayElement();
 					elems.push_back(Var(varVal, varErr)); 
@@ -96,7 +96,7 @@ void Parser::Statement() {
 					varErr = exprValue; 
 				}
 				vars[varName] = Var(varVal, varErr); 
-			} else SynErr(24);
+			} else SynErr(26);
 			break;
 		}
 		case _print: {
@@ -108,7 +108,30 @@ void Parser::Statement() {
 			break;
 		}
 		case _ident: {
-			Assignment();
+			Ident();
+			string name = idValue; bool hasIndex = false; int idx; 
+			if (la->kind == _lsqbr) {
+				Get();
+				Expression();
+				Expect(_rsqbr);
+				hasIndex = true; idx = (int)exprValue; 
+			}
+			if (la->kind == _assign) {
+				Get();
+				ValueWithError();
+				if (hasIndex)
+				   setArrayElement(name, idx, Var(varVal, varErr));
+				else
+				   vars[name] = Var(varVal, varErr);
+				
+			} else if (la->kind == _dot) {
+				Get();
+				Expect(_append);
+				Expect(_lbrack);
+				ValueWithError();
+				Expect(_rbrack);
+				appendToArray(name, Var(varVal, varErr)); 
+			} else SynErr(27);
 			break;
 		}
 		case _alias: {
@@ -119,9 +142,9 @@ void Parser::Statement() {
 			ExportStmt();
 			break;
 		}
-		default: SynErr(25); break;
+		default: SynErr(28); break;
 		}
-		while (!(la->kind == _EOF || la->kind == _semicolon)) {SynErr(26); Get();}
+		while (!(la->kind == _EOF || la->kind == _semicolon)) {SynErr(29); Get();}
 		Expect(_semicolon);
 }
 
@@ -151,7 +174,7 @@ void Parser::ArrayElement() {
 			   varVal = 0; varErr = 0;
 			}
 			
-		} else SynErr(27);
+		} else SynErr(30);
 }
 
 void Parser::Expression() {
@@ -204,7 +227,7 @@ void Parser::Print() {
 			Expression();
 			cout << exprValue << " +/- " << exprError << endl;
 			
-		} else SynErr(28);
+		} else SynErr(31);
 }
 
 void Parser::Read() {
@@ -218,22 +241,27 @@ void Parser::Read() {
 		
 }
 
-void Parser::Assignment() {
-		Ident();
-		string name = idValue; bool hasIndex = false; int idx; 
-		if (la->kind == _lsqbr) {
+void Parser::ValueWithError() {
+		if (la->kind == _number) {
 			Get();
-			Expression();
-			Expect(_rsqbr);
-			hasIndex = true; idx = (int)exprValue; 
-		}
-		Expect(_assign);
-		ValueWithError();
-		if (hasIndex)
-		   setArrayElement(name, idx, Var(varVal, varErr));
-		else
-		   vars[name] = Var(varVal, varErr);
-		
+			wstring num(t->val); varVal = stod(num); varErr = 0; 
+			if (la->kind == _plusminus) {
+				Get();
+				Expect(_number);
+				wstring num(t->val); varErr = stod(num); 
+			}
+		} else if (la->kind == _ident) {
+			Ident();
+			string name = idValue;
+			if (vars.find(name) != vars.end()) {
+			   varVal = vars[name].val;
+			   varErr = vars[name].err;
+			} else {
+			   cout << "Variable '" << name << "' not defined" << endl;
+			   varVal = 0; varErr = 0;
+			}
+			
+		} else SynErr(32);
 }
 
 void Parser::AliasStmt() {
@@ -276,29 +304,6 @@ void Parser::ExportStmt() {
 		   cout << "Variable/array " << name << " not defined" << endl;
 		}
 		
-}
-
-void Parser::ValueWithError() {
-		if (la->kind == _number) {
-			Get();
-			wstring num(t->val); varVal = stod(num); varErr = 0; 
-			if (la->kind == _plusminus) {
-				Get();
-				Expect(_number);
-				wstring num(t->val); varErr = stod(num); 
-			}
-		} else if (la->kind == _ident) {
-			Ident();
-			string name = idValue;
-			if (vars.find(name) != vars.end()) {
-			   varVal = vars[name].val;
-			   varErr = vars[name].err;
-			} else {
-			   cout << "Variable '" << name << "' not defined" << endl;
-			   varVal = 0; varErr = 0;
-			}
-			
-		} else SynErr(29);
 }
 
 void Parser::Term() {
@@ -374,7 +379,7 @@ void Parser::Factor() {
 			Expression();
 			Expect(_rbrack);
 			if (negative) exprValue = -exprValue; 
-		} else SynErr(30);
+		} else SynErr(33);
 }
 
 
@@ -478,7 +483,7 @@ void Parser::Parse() {
 }
 
 Parser::Parser(Scanner *scanner) {
-	maxT = 23;
+	maxT = 25;
 
 	ParserInitCaller<Parser>::CallInit(this);
 	dummyToken = NULL;
@@ -493,10 +498,10 @@ bool Parser::StartOf(int s) {
 	const bool T = true;
 	const bool x = false;
 
-	static bool set[3][25] = {
-		{T,x,x,x, x,x,x,x, x,x,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x},
-		{x,T,x,x, x,x,x,x, x,x,x,x, x,T,T,T, x,T,x,x, T,x,x,x, x},
-		{x,T,T,x, T,x,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x}
+	static bool set[3][27] = {
+		{T,x,x,x, x,x,x,x, x,x,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x},
+		{x,T,x,x, x,x,x,x, x,x,x,x, x,T,T,T, x,T,x,x, T,x,x,x, x,x,x},
+		{x,T,T,x, T,x,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x}
 	};
 
 
@@ -539,15 +544,18 @@ void Errors::SynErr(int line, int col, int n) {
 			case 19: s = coco_string_create(L"strToken expected"); break;
 			case 20: s = coco_string_create(L"exportToken expected"); break;
 			case 21: s = coco_string_create(L"to expected"); break;
-			case 22: s = coco_string_create(L"\",\" expected"); break;
-			case 23: s = coco_string_create(L"??? expected"); break;
-			case 24: s = coco_string_create(L"invalid Statement"); break;
-			case 25: s = coco_string_create(L"invalid Statement"); break;
-			case 26: s = coco_string_create(L"this symbol not expected in Statement"); break;
-			case 27: s = coco_string_create(L"invalid ArrayElement"); break;
-			case 28: s = coco_string_create(L"invalid Print"); break;
-			case 29: s = coco_string_create(L"invalid ValueWithError"); break;
-			case 30: s = coco_string_create(L"invalid Factor"); break;
+			case 22: s = coco_string_create(L"dot expected"); break;
+			case 23: s = coco_string_create(L"append expected"); break;
+			case 24: s = coco_string_create(L"\",\" expected"); break;
+			case 25: s = coco_string_create(L"??? expected"); break;
+			case 26: s = coco_string_create(L"invalid Statement"); break;
+			case 27: s = coco_string_create(L"invalid Statement"); break;
+			case 28: s = coco_string_create(L"invalid Statement"); break;
+			case 29: s = coco_string_create(L"this symbol not expected in Statement"); break;
+			case 30: s = coco_string_create(L"invalid ArrayElement"); break;
+			case 31: s = coco_string_create(L"invalid Print"); break;
+			case 32: s = coco_string_create(L"invalid ValueWithError"); break;
+			case 33: s = coco_string_create(L"invalid Factor"); break;
 
 		default:
 		{

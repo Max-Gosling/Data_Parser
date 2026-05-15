@@ -53,6 +53,14 @@ static void setArrayElement(const string& name, int index, const Var& value) {
     arrays[name][index] = value;
 }
 
+static void appendToArray(const string& name, const Var& value) {
+    if (arrays.find(name) == arrays.end()) {
+        cout << "Array '" << name << "' not defined" << endl;
+        return;
+    }
+    arrays[name].push_back(value);
+}
+
 static void printArray(const string& name) {
     auto it = arrays.find(name);
     if (it == arrays.end()) {
@@ -130,7 +138,9 @@ private:
 		_as=18,
 		_strToken=19,
 		_exportToken=20,
-		_to=21
+		_to=21,
+		_dot=22,
+		_append=23
 	};
 	int maxT;
 
@@ -165,10 +175,9 @@ public:
 	void Expression();
 	void Print();
 	void Read();
-	void Assignment();
+	void ValueWithError();
 	void AliasStmt();
 	void ExportStmt();
-	void ValueWithError();
 	void Term();
 	void Factor();
 
